@@ -4,15 +4,12 @@ const mongoose = require('mongoose');
 const mqtt = require('mqtt');
 const axios = require('axios');
 const cors = require('cors');
-const { Telegraf } = require('telegraf'); // <-- Menggunakan library Telegraf modern
+const { Telegraf } = require('telegraf');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// ==========================================
-// 1. KONEKSI MONGODB
-// ==========================================
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("Terhubung ke MongoDB"))
     .catch((err) => console.error("Gagal terhubung ke MongoDB:", err.message));
@@ -21,6 +18,8 @@ const GasSchema = new mongoose.Schema({
     gas_value: Number,
     status: String,
     kipas_aktif: Boolean,
+    temperature: Number,
+    humidity: Number,
     timestamp: { type: Date, default: Date.now }
 });
 const GasModel = mongoose.model('GasData', GasSchema);
@@ -34,37 +33,22 @@ app.get('/api/history', async (req, res) => {
     }
 });
 
-// ==========================================
-// 2. SETUP TELEGRAM BOT & COMMANDS (Telegraf)
-// ==========================================
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 let isAlertSent = false; 
 
-// Command: /start
 bot.start((ctx) => {
-    const pesan = `Halo ${ctx.from.first_name}!\n\nSistem Notifikasi Keamanan *GasGuards* telah aktif dan terhubung dengan perangkat pintar Anda.\n\nKetik /help untuk panduan, atau /info untuk detail project.`;
+    const pesan = `Halo ${ctx.from.first_name}!\n\nSistem GasGuards telah aktif.\nKetik /help untuk panduan.`;
     ctx.reply(pesan, { parse_mode: "Markdown" });
 });
 
-// Command: /help
 bot.help((ctx) => {
-    const pesan = `*PANDUAN SISTEM GASGUARDS*\n\n1. Sistem memantau kondisi udara 24 jam non-stop.\n2. Jika menerima pesan *BAHAYA*, segera periksa sumber gas Anda dan pastikan tidak ada percikan api.\n3. Kipas Exhaust otomatis menyala untuk membuang gas.\n4. Sistem kembali ke mode standby jika gas sudah tidak terdeteksi.`;
+    const pesan = `*PANDUAN SISTEM*\nSistem ini memantau Kebocoran Gas LPG dan Potensi Kebakaran dari suhu ruangan. Kipas akan otomatis menyala jika mendeteksi bahaya.`;
     ctx.reply(pesan, { parse_mode: "Markdown" });
 });
 
-// Command: /info
-bot.command('info', (ctx) => {
-    const pesan = `*INFORMASI PROJECT*\n\n*Nama Project:* GasGuards\n*Deskripsi:* Smart Home Safety System Berbasis IoT untuk Deteksi Kebocoran Gas LPG pada Kawasan Smart Village.\n*Komponen:* ESP32, Sensor MQ-5, Relay, Exhaust Fan 12V.\n*Cloud:* HiveMQ, MongoDB, Blynk IoT, & Telegram.`;
-    ctx.reply(pesan, { parse_mode: "Markdown" });
-});
-
-// Menjalankan Bot Telegram
 bot.launch();
-console.log("Bot Telegram berhasil diaktifkan!");
+console.log("Bot Telegram aktif!");
 
-// ==========================================
-// 3. KONEKSI MQTT & LOGIKA SISTEM
-// ==========================================
 const mqttOptions = {
     username: process.env.MQTT_USER,
     password: process.env.MQTT_PASS
@@ -78,32 +62,34 @@ mqttClient.on('connect', () => {
 
 mqttClient.on('message', async (topic, message) => {
     try {
-        const dataSensor = JSON.parse(message.toString());
-        console.log(`Menerima Data: Gas=${dataSensor.gas_value}, Status=${dataSensor.status}`);
+        const data = JSON.parse(message.toString());
+        console.log(`Data: Gas=${data.gas_value}, Suhu=${data.temperature}C, Lembap=${data.humidity}%, Status=${data.status}`);
 
-        // Simpan data ke MongoDB
         const newRecord = new GasModel({
-            gas_value: dataSensor.gas_value,
-            status: dataSensor.status,
-            kipas_aktif: dataSensor.kipas_aktif
+            gas_value: data.gas_value,
+            status: data.status,
+            kipas_aktif: data.kipas_aktif,
+            temperature: data.temperature,
+            humidity: data.humidity
         });
         await newRecord.save();
 
-        // Update data ke Blynk
-        const fanStatus = dataSensor.kipas_aktif ? 1 : 0;
-        const blynkUrl = `${process.env.BLYNK_HOST}/external/api/batch/update?token=${process.env.BLYNK_AUTH_TOKEN}&V1=${dataSensor.gas_value}&V2=${dataSensor.status}&V3=${fanStatus}`;
+        const fanStatus = data.kipas_aktif ? 1 : 0;
+        const blynkUrl = `${process.env.BLYNK_HOST}/external/api/batch/update?token=${process.env.BLYNK_AUTH_TOKEN}&V1=${data.gas_value}&V2=${data.status}&V3=${fanStatus}&V4=${data.temperature}&V5=${data.humidity}`;
         await axios.get(blynkUrl).catch(() => {}); 
 
-        // Logika pengiriman peringatan Telegram
-        if (dataSensor.status === "BAHAYA KEBOCORAN!" && !isAlertSent) {
-            const pesanBahaya = `*PERINGATAN BAHAYA GAS!*\n\nSistem mendeteksi adanya kebocoran gas LPG!\n*Level Gas:* ${dataSensor.gas_value} ppm\n*Tindakan:* Kipas Exhaust dan Alarm telah diaktifkan secara otomatis.\n\n_Segera periksa area dapur Anda!_`;
+        // Logika Telegram Dinamis untuk 2 Jenis Bahaya
+        if ((data.status === "BAHAYA KEBOCORAN!" || data.status === "POTENSI KEBAKARAN!") && !isAlertSent) {
+            
+            const jenisBahaya = data.status === "BAHAYA KEBOCORAN!" ? "Kebocoran Gas LPG" : "Potensi Kebakaran (Suhu Ekstrem)";
+            const pesanBahaya = `*PERINGATAN DARURAT!*\n\nSistem mendeteksi adanya *${jenisBahaya}* di area dapur!\n\n*Detail Sensor Terkini:*\n- Level Gas: ${data.gas_value} ppm\n- Suhu Ruangan: ${data.temperature} °C\n- Kelembapan: ${data.humidity} %\n\n*Tindakan:* Kipas Exhaust dan Alarm aktif.\n\n_Segera periksa lokasi untuk menghindari insiden!_`;
             
             bot.telegram.sendMessage(process.env.TELEGRAM_CHAT_ID, pesanBahaya, { parse_mode: "Markdown" })
                 .catch(err => console.error("Gagal kirim Telegram:", err.message));
             isAlertSent = true; 
         } 
-        else if (dataSensor.status === "AMAN" && isAlertSent) {
-            const pesanAman = `*KONDISI TELAH AMAN*\n\nKebocoran gas telah tertangani.\n*Level Gas Terkini:* ${dataSensor.gas_value} ppm\n*Tindakan:* Kipas Exhaust dan Alarm telah dimatikan.\n\n_Sistem kembali ke mode pemantauan normal._`;
+        else if (data.status === "AMAN" && isAlertSent) {
+            const pesanAman = `*KONDISI TELAH AMAN*\n\nSituasi telah terkendali.\n\n*Detail Sensor Terkini:*\n- Level Gas: ${data.gas_value} ppm\n- Suhu Ruangan: ${data.temperature} °C\n\n*Tindakan:* Kipas dan Alarm dimatikan.\n\n_Sistem kembali ke mode normal._`;
             
             bot.telegram.sendMessage(process.env.TELEGRAM_CHAT_ID, pesanAman, { parse_mode: "Markdown" })
                 .catch(err => console.error("Gagal kirim Telegram:", err.message));
@@ -111,18 +97,14 @@ mqttClient.on('message', async (topic, message) => {
         }
 
     } catch (error) {
-        console.error("Error saat memproses pesan MQTT:", error.message);
+        console.error("Error proses MQTT:", error.message);
     }
 });
 
-// Handle agar bot tidak error saat dimatikan (Graceful stop)
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-// ==========================================
-// 4. JALANKAN SERVER
-// ==========================================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(`Server Backend GasGuards berjalan di port ${PORT}`);
+    console.log(`Server Backend berjalan di port ${PORT}`);
 });
