@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>GasGuards Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -39,6 +39,7 @@
             margin: 0;
             font-weight: 600;
             letter-spacing: 1px;
+            font-size: 24px;
         }
 
         .device-badge {
@@ -96,6 +97,7 @@
             justify-content: center;
             height: 150px;
             text-transform: uppercase;
+            text-align: center;
         }
 
         .temp-text {
@@ -123,6 +125,7 @@
             padding: 10px;
             border-radius: 5px;
             border: 1px solid var(--line-color);
+            font-size: 14px;
         }
 
         .log-entry {
@@ -136,9 +139,63 @@
             margin-right: 10px;
         }
 
+        /* =========================================
+           OPTIMASI RESPONSIVE KHUSUS MOBILE (HP) 
+           ========================================= */
         @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .header h2 {
+                font-size: 18px;
+            }
+
+            .device-badge {
+                font-size: 12px;
+                padding: 5px 10px;
+            }
+
+            /* Tumpuk semua kotak menjadi 1 kolom ke bawah */
             .dashboard-grid {
                 grid-template-columns: 1fr;
+                gap: 15px;
+                margin-bottom: 15px;
+            }
+
+            .card {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+
+            /* Kecilkan ukuran grafik dan teks agar tidak menabrak batas layar HP */
+            .gauge-container {
+                height: 160px;
+            }
+
+            .gauge-text {
+                font-size: 28px;
+                bottom: 10px;
+            }
+
+            .status-text {
+                font-size: 28px;
+                height: 100px;
+            }
+
+            .temp-text {
+                font-size: 40px;
+                height: 100px;
+            }
+
+            /* Sesuaikan tinggi Line Chart di HP */
+            .chart-box {
+                height: 200px !important;
+            }
+
+            .terminal-log {
+                font-size: 12px;
+                height: 120px;
             }
         }
     </style>
@@ -148,7 +205,7 @@
 
     <div class="header">
         <h2>GasGuards</h2>
-        <div id="deviceBadge" class="device-badge">Menunggu Koneksi...</div>
+        <div id="deviceBadge" class="device-badge">Menunggu...</div>
     </div>
 
     <div class="dashboard-grid">
@@ -166,9 +223,9 @@
         </div>
     </div>
 
-    <div class="card" style="margin-bottom: 20px;">
+    <div class="card">
         <div class="card-title">Line Chart Gas Harian</div>
-        <div style="height: 250px;">
+        <div class="chart-box" style="height: 250px;">
             <canvas id="gasLineChart"></canvas>
         </div>
     </div>
@@ -181,7 +238,7 @@
 
         <div class="card">
             <div class="card-title">Tren Suhu</div>
-            <div style="height: 150px;">
+            <div class="chart-box" style="height: 150px;">
                 <canvas id="tempLineChart"></canvas>
             </div>
         </div>
@@ -206,57 +263,29 @@
             padding: 10,
             displayColors: false,
             callbacks: {
-                label: function (context) {
-                    return `${context.dataset.label}: ${context.parsed.y}`;
-                }
+                label: function (context) { return `${context.dataset.label}: ${context.parsed.y}`; }
             }
         };
 
         const ctxGauge = document.getElementById('gasGauge').getContext('2d');
         const gasGauge = new Chart(ctxGauge, {
             type: 'doughnut',
-            data: {
-                datasets: [{
-                    data: [0, 4095],
-                    backgroundColor: ['#00a8ff', '#1a1d21'],
-                    borderWidth: 0,
-                    borderRadius: 20
-                }]
-            },
-            options: {
-                circumference: 180,
-                rotation: -90,
-                cutout: '80%',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { tooltip: { enabled: false } }
-            }
+            data: { datasets: [{ data: [0, 4095], backgroundColor: ['#00a8ff', '#1a1d21'], borderWidth: 0, borderRadius: 20 }] },
+            options: { circumference: 180, rotation: -90, cutout: '80%', responsive: true, maintainAspectRatio: false, plugins: { tooltip: { enabled: false } } }
         });
 
         const ctxGasLine = document.getElementById('gasLineChart').getContext('2d');
         const gasLineChart = new Chart(ctxGasLine, {
             type: 'line',
             data: { labels: [], datasets: [{ label: 'Konsentrasi Gas', data: [], borderColor: '#00a8ff', backgroundColor: 'rgba(0, 168, 255, 0.1)', fill: true, tension: 0.4, pointRadius: 1, pointHoverRadius: 6 }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                scales: { y: { beginAtZero: true, suggestedMax: 1000 } },
-                plugins: { legend: { display: false }, tooltip: customTooltip }
-            }
+            options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true, suggestedMax: 1000 } }, plugins: { legend: { display: false }, tooltip: customTooltip } }
         });
 
         const ctxTempLine = document.getElementById('tempLineChart').getContext('2d');
         const tempLineChart = new Chart(ctxTempLine, {
             type: 'line',
             data: { labels: [], datasets: [{ label: 'Suhu Ruangan', data: [], borderColor: '#ff4757', backgroundColor: 'rgba(255, 71, 87, 0.1)', fill: true, tension: 0.4, pointRadius: 1, pointHoverRadius: 6 }] },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                interaction: { mode: 'index', intersect: false },
-                scales: { y: { suggestedMin: 20, suggestedMax: 40 } },
-                plugins: { legend: { display: false }, tooltip: { ...customTooltip, borderColor: '#ff4757' } }
-            }
+            options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { suggestedMin: 20, suggestedMax: 40 } }, plugins: { legend: { display: false }, tooltip: { ...customTooltip, borderColor: '#ff4757' } } }
         });
 
         let lastStatus = "";
@@ -270,10 +299,8 @@
                     const dataDb = result.data.reverse();
                     const dataTerkini = dataDb[dataDb.length - 1];
 
-                    // Cek status perangkat (Offline jika data terakhir lebih lama dari 15 detik)
                     const lastUpdate = new Date(dataTerkini.timestamp);
-                    const now = new Date();
-                    const diffSeconds = (now - lastUpdate) / 1000;
+                    const diffSeconds = (new Date() - lastUpdate) / 1000;
 
                     const badgeEl = document.getElementById('deviceBadge');
                     const statusEl = document.getElementById('statusText');
@@ -313,7 +340,7 @@
                             const logBox = document.getElementById('terminalLog');
                             const waktu = new Date().toLocaleTimeString('id-ID');
                             const warna = dataTerkini.status === "AMAN" ? "#2ed573" : "#ff4757";
-                            logBox.innerHTML = `<div class="log-entry"><span class="log-time">[${waktu}]</span> Perubahan Status: <span style="color:${warna}; font-weight:bold;">${dataTerkini.status}</span> (Gas: ${dataTerkini.gas_value})</div>` + logBox.innerHTML;
+                            logBox.innerHTML = `<div class="log-entry"><span class="log-time">[${waktu}]</span> Status: <span style="color:${warna}; font-weight:bold;">${dataTerkini.status}</span> (Gas: ${dataTerkini.gas_value})</div>` + logBox.innerHTML;
                         }
                         lastStatus = dataTerkini.status;
                     }
@@ -327,7 +354,6 @@
 
         fetchDashboardData();
         setInterval(fetchDashboardData, 2000);
-
     </script>
 </body>
 
