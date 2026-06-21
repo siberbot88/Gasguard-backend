@@ -64,7 +64,8 @@
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            position: relative;
+            display: flex;
+            flex-direction: column;
         }
 
         .card-title {
@@ -74,16 +75,23 @@
             text-transform: uppercase;
         }
 
+        .chart-box {
+            position: relative;
+            width: 100%;
+            flex-grow: 1;
+        }
+
         .gauge-container {
             position: relative;
-            height: 200px;
+            height: 180px;
             display: flex;
             justify-content: center;
+            width: 100%;
         }
 
         .gauge-text {
             position: absolute;
-            bottom: 20px;
+            bottom: 10px;
             font-size: 36px;
             font-weight: bold;
         }
@@ -95,7 +103,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 150px;
+            height: 180px;
             text-transform: uppercase;
             text-align: center;
         }
@@ -139,9 +147,6 @@
             margin-right: 10px;
         }
 
-        /* =========================================
-           OPTIMASI RESPONSIVE KHUSUS MOBILE (HP) 
-           ========================================= */
         @media (max-width: 768px) {
             body {
                 padding: 10px;
@@ -156,7 +161,6 @@
                 padding: 5px 10px;
             }
 
-            /* Tumpuk semua kotak menjadi 1 kolom ke bawah */
             .dashboard-grid {
                 grid-template-columns: 1fr;
                 gap: 15px;
@@ -168,14 +172,13 @@
                 margin-bottom: 15px;
             }
 
-            /* Kecilkan ukuran grafik dan teks agar tidak menabrak batas layar HP */
             .gauge-container {
                 height: 160px;
             }
 
             .gauge-text {
                 font-size: 28px;
-                bottom: 10px;
+                bottom: 5px;
             }
 
             .status-text {
@@ -186,16 +189,6 @@
             .temp-text {
                 font-size: 40px;
                 height: 100px;
-            }
-
-            /* Sesuaikan tinggi Line Chart di HP */
-            .chart-box {
-                height: 200px !important;
-            }
-
-            .terminal-log {
-                font-size: 12px;
-                height: 120px;
             }
         }
     </style>
@@ -211,7 +204,7 @@
     <div class="dashboard-grid">
         <div class="card">
             <div class="card-title">Nilai Kebocoran Gas</div>
-            <div class="gauge-container">
+            <div class="chart-box gauge-container">
                 <canvas id="gasGauge"></canvas>
                 <div class="gauge-text" id="gasValueText">0</div>
             </div>
@@ -223,7 +216,7 @@
         </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-bottom: 20px;">
         <div class="card-title">Line Chart Gas Harian</div>
         <div class="chart-box" style="height: 250px;">
             <canvas id="gasLineChart"></canvas>
@@ -238,7 +231,7 @@
 
         <div class="card">
             <div class="card-title">Tren Suhu</div>
-            <div class="chart-box" style="height: 150px;">
+            <div class="chart-box" style="height: 180px;">
                 <canvas id="tempLineChart"></canvas>
             </div>
         </div>
@@ -278,14 +271,38 @@
         const gasLineChart = new Chart(ctxGasLine, {
             type: 'line',
             data: { labels: [], datasets: [{ label: 'Konsentrasi Gas', data: [], borderColor: '#00a8ff', backgroundColor: 'rgba(0, 168, 255, 0.1)', fill: true, tension: 0.4, pointRadius: 1, pointHoverRadius: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { beginAtZero: true, suggestedMax: 1000 } }, plugins: { legend: { display: false }, tooltip: customTooltip } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: {
+                        ticks: { maxRotation: 0, minRotation: 0, maxTicksLimit: 8 }, // Mengatur agar teks lurus & tidak menumpuk
+                        grid: { color: '#3d444b' }
+                    },
+                    y: { beginAtZero: true, suggestedMax: 1000, grid: { color: '#3d444b' } }
+                },
+                plugins: { legend: { display: false }, tooltip: customTooltip }
+            }
         });
 
         const ctxTempLine = document.getElementById('tempLineChart').getContext('2d');
         const tempLineChart = new Chart(ctxTempLine, {
             type: 'line',
             data: { labels: [], datasets: [{ label: 'Suhu Ruangan', data: [], borderColor: '#ff4757', backgroundColor: 'rgba(255, 71, 87, 0.1)', fill: true, tension: 0.4, pointRadius: 1, pointHoverRadius: 6 }] },
-            options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, scales: { y: { suggestedMin: 20, suggestedMax: 40 } }, plugins: { legend: { display: false }, tooltip: { ...customTooltip, borderColor: '#ff4757' } } }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: {
+                        ticks: { maxRotation: 0, minRotation: 0, maxTicksLimit: 6 }, // Mengatur agar teks lurus & tidak menumpuk
+                        grid: { color: '#3d444b' }
+                    },
+                    y: { suggestedMin: 20, suggestedMax: 40, grid: { color: '#3d444b' } }
+                },
+                plugins: { legend: { display: false }, tooltip: { ...customTooltip, borderColor: '#ff4757' } }
+            }
         });
 
         let lastStatus = "";
