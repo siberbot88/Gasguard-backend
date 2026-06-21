@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GasGuards Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #1e2126;
+            --card-bg: #2b3036;
+            --text-main: #ffffff;
+            --text-muted: #8b95a1;
+            --blue-blynk: #00a8ff;
+            --red-alert: #ff4757;
+            --green-safe: #2ed573;
+            --line-color: #3d444b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--line-color);
+            padding-bottom: 10px;
+        }
+
+        .header h2 {
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .device-badge {
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            background-color: var(--text-muted);
+            color: #fff;
+            transition: background-color 0.3s;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .card-title {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .gauge-container {
+            position: relative;
+            height: 200px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .gauge-text {
+            position: absolute;
+            bottom: 20px;
+            font-size: 36px;
+            font-weight: bold;
+        }
+
+        .status-text,
+        .temp-text {
+            font-size: 42px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 150px;
+            text-transform: uppercase;
+        }
+
+        .temp-text {
+            font-size: 54px;
+        }
+
+        .text-aman {
+            color: var(--text-main);
+        }
+
+        .text-bahaya {
+            color: var(--red-alert);
+        }
+
+        .text-offline {
+            color: var(--text-muted);
+        }
+
+        .terminal-log {
+            background-color: #1a1d21;
+            color: #a3be8c;
+            font-family: monospace;
+            height: 150px;
+            overflow-y: auto;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid var(--line-color);
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px dashed #2b3036;
+            padding-bottom: 5px;
+        }
+
+        .log-time {
+            color: #61afef;
+            margin-right: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h2>GasGuards</h2>
+        <div id="deviceBadge" class="device-badge">Menunggu Koneksi...</div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <div class="card-title">Nilai Kebocoran Gas</div>
+            <div class="gauge-container">
+                <canvas id="gasGauge"></canvas>
+                <div class="gauge-text" id="gasValueText">0</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Status Ruangan</div>
+            <div id="statusText" class="status-text text-aman">MEMUAT...</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 20px;">
+        <div class="card-title">Line Chart Gas Harian</div>
+        <div style="height: 250px;">
+            <canvas id="gasLineChart"></canvas>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <div class="card-title">Suhu Ruangan</div>
+            <div id="tempText" class="temp-text">0.0°C</div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Tren Suhu</div>
+            <div style="height: 150px;">
+                <canvas id="tempLineChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Catatan Riwayat</div>
+        <div id="terminalLog" class="terminal-log"></div>
+    </div>
+
+    <script>
+        Chart.defaults.color = '#8b95a1';
+        Chart.defaults.borderColor = '#3d444b';
+
+        const customTooltip = {
+            enabled: true,
+            backgroundColor: 'rgba(43, 48, 54, 0.95)',
+            titleColor: '#8b95a1',
+            bodyColor: '#ffffff',
+            borderColor: '#00a8ff',
+            borderWidth: 1,
+            padding: 10,
+            displayColors: false,
+            callbacks: {
+                label: function (context) {
+                    return `${context.dataset.label}: ${context.parsed.y}`;
+                }
+            }
+        };
+
+        const ctxGauge = document.getElementById('gasGauge').getContext('2d');
+        const gasGauge = new Chart(ctxGauge, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [0, 4095],
+                    backgroundColor: ['#00a8ff', '#1a1d21'],
+                    borderWidth: 0,
+                    borderRadius: 20
+                }]
+            },
+            options: {
+                circumference: 180,
+                rotation: -90,
+                cutout: '80%',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { tooltip: { enabled: false } }
+            }
+        });
+
+        const ctxGasLine = document.getElementById('gasLineChart').getContext('2d');
+        const gasLineChart = new Chart(ctxGasLine, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: 'Konsentrasi Gas', data: [], borderColor: '#00a8ff', backgroundColor: 'rgba(0, 168, 255, 0.1)', fill: true, tension: 0.4, pointRadius: 1, pointHoverRadius: 6 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: { y: { beginAtZero: true, suggestedMax: 1000 } },
+                plugins: { legend: { display: false }, tooltip: customTooltip }
+            }
+        });
+
+        const ctxTempLine = document.getElementById('tempLineChart').getContext('2d');
+        const tempLineChart = new Chart(ctxTempLine, {
+            type: 'line',
+            data: { labels: [], datasets: [{ label: 'Suhu Ruangan', data: [], borderColor: '#ff4757', backgroundColor: 'rgba(255, 71, 87, 0.1)', fill: true, tension: 0.4, pointRadius: 1, pointHoverRadius: 6 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: { y: { suggestedMin: 20, suggestedMax: 40 } },
+                plugins: { legend: { display: false }, tooltip: { ...customTooltip, borderColor: '#ff4757' } }
+            }
+        });
+
+        let lastStatus = "";
+
+        async function fetchDashboardData() {
+            try {
+                const response = await fetch('/api/history');
+                const result = await response.json();
+
+                if (result.success && result.data.length > 0) {
+                    const dataDb = result.data.reverse();
+                    const dataTerkini = dataDb[dataDb.length - 1];
+
+                    // Cek status perangkat (Offline jika data terakhir lebih lama dari 15 detik)
+                    const lastUpdate = new Date(dataTerkini.timestamp);
+                    const now = new Date();
+                    const diffSeconds = (now - lastUpdate) / 1000;
+
+                    const badgeEl = document.getElementById('deviceBadge');
+                    const statusEl = document.getElementById('statusText');
+
+                    if (diffSeconds > 15) {
+                        badgeEl.innerText = "Alat: OFFLINE";
+                        badgeEl.style.backgroundColor = "var(--red-alert)";
+                        statusEl.innerText = "OFFLINE";
+                        statusEl.className = "status-text text-offline";
+                    } else {
+                        badgeEl.innerText = "Alat: ONLINE";
+                        badgeEl.style.backgroundColor = "var(--green-safe)";
+                        statusEl.innerText = dataTerkini.status;
+                        statusEl.className = dataTerkini.status === "AMAN" ? "status-text text-aman" : "status-text text-bahaya";
+                    }
+
+                    document.getElementById('gasValueText').innerText = dataTerkini.gas_value;
+                    document.getElementById('tempText').innerText = dataTerkini.temperature + '°C';
+
+                    gasGauge.data.datasets[0].data = [dataTerkini.gas_value, 4095 - dataTerkini.gas_value];
+                    gasGauge.update();
+
+                    const labelsWaktu = dataDb.map(item => new Date(item.timestamp).toLocaleTimeString('id-ID'));
+                    const arrayGas = dataDb.map(item => item.gas_value);
+                    const arraySuhu = dataDb.map(item => item.temperature);
+
+                    gasLineChart.data.labels = labelsWaktu;
+                    gasLineChart.data.datasets[0].data = arrayGas;
+                    gasLineChart.update();
+
+                    tempLineChart.data.labels = labelsWaktu;
+                    tempLineChart.data.datasets[0].data = arraySuhu;
+                    tempLineChart.update();
+
+                    if (dataTerkini.status !== lastStatus && diffSeconds <= 15) {
+                        if (lastStatus !== "") {
+                            const logBox = document.getElementById('terminalLog');
+                            const waktu = new Date().toLocaleTimeString('id-ID');
+                            const warna = dataTerkini.status === "AMAN" ? "#2ed573" : "#ff4757";
+                            logBox.innerHTML = `<div class="log-entry"><span class="log-time">[${waktu}]</span> Perubahan Status: <span style="color:${warna}; font-weight:bold;">${dataTerkini.status}</span> (Gas: ${dataTerkini.gas_value})</div>` + logBox.innerHTML;
+                        }
+                        lastStatus = dataTerkini.status;
+                    }
+                }
+            } catch (error) {
+                const badgeEl = document.getElementById('deviceBadge');
+                badgeEl.innerText = "Server Error";
+                badgeEl.style.backgroundColor = "var(--text-muted)";
+            }
+        }
+
+        fetchDashboardData();
+        setInterval(fetchDashboardData, 2000);
+
+    </script>
+</body>
+
+</html>

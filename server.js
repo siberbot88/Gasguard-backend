@@ -9,6 +9,7 @@ const { Telegraf } = require('telegraf');
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use(express.static('public'));
 
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log("Terhubung ke MongoDB"))
@@ -34,7 +35,7 @@ app.get('/api/history', async (req, res) => {
 });
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
-let isAlertSent = false; 
+let isAlertSent = false;
 
 bot.start((ctx) => {
     const pesan = `Halo ${ctx.from.first_name}!\n\nSistem GasGuards telah aktif.\nKetik /help untuk panduan.`;
@@ -76,24 +77,24 @@ mqttClient.on('message', async (topic, message) => {
 
         const fanStatus = data.kipas_aktif ? 1 : 0;
         const blynkUrl = `${process.env.BLYNK_HOST}/external/api/batch/update?token=${process.env.BLYNK_AUTH_TOKEN}&V1=${data.gas_value}&V2=${data.status}&V3=${fanStatus}&V4=${data.temperature}&V5=${data.humidity}`;
-        await axios.get(blynkUrl).catch(() => {}); 
+        await axios.get(blynkUrl).catch(() => { });
 
         // Logika Telegram Dinamis untuk 2 Jenis Bahaya
         if ((data.status === "BAHAYA KEBOCORAN!" || data.status === "POTENSI KEBAKARAN!") && !isAlertSent) {
-            
+
             const jenisBahaya = data.status === "BAHAYA KEBOCORAN!" ? "Kebocoran Gas LPG" : "Potensi Kebakaran (Suhu Ekstrem)";
             const pesanBahaya = `*PERINGATAN DARURAT!*\n\nSistem mendeteksi adanya *${jenisBahaya}* di area dapur!\n\n*Detail Sensor Terkini:*\n- Level Gas: ${data.gas_value} ppm\n- Suhu Ruangan: ${data.temperature} °C\n- Kelembapan: ${data.humidity} %\n\n*Tindakan:* Kipas Exhaust dan Alarm aktif.\n\n_Segera periksa lokasi untuk menghindari insiden!_`;
-            
+
             bot.telegram.sendMessage(process.env.TELEGRAM_CHAT_ID, pesanBahaya, { parse_mode: "Markdown" })
                 .catch(err => console.error("Gagal kirim Telegram:", err.message));
-            isAlertSent = true; 
-        } 
+            isAlertSent = true;
+        }
         else if (data.status === "AMAN" && isAlertSent) {
             const pesanAman = `*KONDISI TELAH AMAN*\n\nSituasi telah terkendali.\n\n*Detail Sensor Terkini:*\n- Level Gas: ${data.gas_value} ppm\n- Suhu Ruangan: ${data.temperature} °C\n\n*Tindakan:* Kipas dan Alarm dimatikan.\n\n_Sistem kembali ke mode normal._`;
-            
+
             bot.telegram.sendMessage(process.env.TELEGRAM_CHAT_ID, pesanAman, { parse_mode: "Markdown" })
                 .catch(err => console.error("Gagal kirim Telegram:", err.message));
-            isAlertSent = false; 
+            isAlertSent = false;
         }
 
     } catch (error) {
